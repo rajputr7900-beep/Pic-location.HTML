@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Location + Front Camera (with Consent)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 16px; max-width: 720px; margin: auto; }
+    video, canvas { width: 320px; height: 240px; border: 1px solid #ccc; display:block; }
+    .controls { margin-top: 8px; }
+    .status { margin-top: 8px; color: #333; }
+  </style>
+</head>
+<body>
+  <h2>Safe Location & Front Camera Demo</h2>
+
+  <div>
+    <button id="getLocationBtn">Request Location</button>
+    <div id="locOutput" class="status">Location: —</div>
+  </div>
+
+  <hr>
+
+  <div>
+    <button id="startCamBtn">Start Front Camera (Ask Permission)</button>
+    <div class="controls">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="photoCanvas" width="320" height="240" style="display:none"></canvas>
+    </div>
+    <div style="margin-top:8px;">
+      <button id="captureBtn" disabled>Capture Photo</button>
+      <button id="stopCamBtn" disabled>Stop Camera</button>
+    </div>
+    <div id="photoOutput" class="status">Captured photo will appear here.</div>
+  </div>
+
+  <script>
+    // LOCATION
+    const getLocationBtn = document.getElementById('getLocationBtn');
+    const locOutput = document.getElementById('locOutput');
+
+    getLocationBtn.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        locOutput.textContent = 'Geolocation is not supported by this browser.';
+        return;
+      }
+
+      locOutput.textContent = 'Requesting location...';
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          locOutput.innerHTML = `Latitude: ${latitude.toFixed(6)}<br>
+                                 Longitude: ${longitude.toFixed(6)}<br>
+                                 Accuracy (meters): ${accuracy}`;
+        },
+        err => {
+          locOutput.textContent = `Location error: ${err.message}`;
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0
+        }
+      );
+    });
+
+    // CAMERA
+    const startCamBtn = document.getElementById('startCamBtn');
+    const stopCamBtn = document.getElementById('stopCamBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('photoCanvas');
+    const photoOutput = document.getElementById('photoOutput');
+
+    let stream = null;
+
+    startCamBtn.addEventListener('click', async () => {
+      // Ask for front-facing camera if available
+      const constraints = {
+        video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        captureBtn.disabled = false;
+        stopCamBtn.disabled = false;
+        startCamBtn.disabled = true;
+        photoOutput.textContent = 'Camera started. Click "Capture Photo" to take a picture.';
+      } catch (err) {
+        photoOutput.textContent = 'Camera permission denied or no camera available: ' + err.message;
+      }
+    });
+
+    captureBtn.addEventListener('click', () => {
+      if (!stream) {
+        photoOutput.textContent = 'Camera not running.';
+        return;
+      }
+      // Draw current frame to canvas
+      const ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 240;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Show captured image below
+      const dataUrl = canvas.toDataURL('image/png');
+      photoOutput.innerHTML = `<div>Captured image:</div><img src="${dataUrl}" alt="captured" style="width:320px;height:auto;border:1px solid #ccc">`;
+    });
+
+    stopCamBtn.addEventListener('click', () => {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      captureBtn.disabled = true;
+      stopCamBtn.disabled = true;
+      startCamBtn.disabled = false;
+      photoOutput.textContent = 'Camera stopped.';
+    });
+
+    // Cleanup on unload
+    window.addEventListener('beforeunload', () => {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+    });
+  </script>
+</body>
+</html>
